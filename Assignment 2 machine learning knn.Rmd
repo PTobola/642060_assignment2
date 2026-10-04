@@ -1,0 +1,169 @@
+---
+title: "Assignment 2 Machine Learning"
+author: "Peter Tobola"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(tidyverse)
+library(caret)
+library(pROC)
+library(ggplot2)
+library(corrplot)
+library(class)
+
+```
+
+## load and read universal bank cvs
+
+```{r}
+UVBank <- read.csv("C:/Users/ptobo/Desktop/Kent State/3 Fundamentals of Machine Learning BA-64060/Assignments/Assignment 2/UniversalBank.csv")
+```
+## summary of UVBank
+
+```{r}
+summary(UVBank)
+```
+## Education dummy var 
+
+```{r}
+UVBank$Education_1 <- as.integer(UVBank$Education == 1)
+UVBank$Education_2 <- as.integer(UVBank$Education == 2)
+UVBank$Education_3 <- as.integer(UVBank$Education == 3)
+UVBank$Education <- NULL
+
+```
+## remove ID and zip code
+
+```{r}
+UVBank$ID <- NULL
+UVBank$ZIP.Code <- NULL
+
+```
+
+## customer predictors_identifiers
+
+```{r}
+predictors <- c("Age", "Experience", "Income", "Family", "CCAvg",
+                "Education_1", "Education_2", "Education_3", "Mortgage",
+                "Securities.Account", "CD.Account", "Online", "CreditCard")
+
+
+```
+## prdictor creteria
+
+```{r}
+new_customer <- data.frame(Age = 40, Experience = 10, Income = 84, Family = 2,
+                           CCAvg = 2, Education_1 = 0, Education_2 = 1,
+                           Education_3 = 0, Mortgage = 0, Securities.Account = 0,
+                           CD.Account = 0, Online = 1, CreditCard = 1)[, predictors]
+summary(UVBank)
+```
+
+## 60/40 training 
+
+```{r}
+set.seed(1)
+n <- nrow(UVBank)
+train_UVB <- sample(n, 0.6 * n)
+train <- UVBank[train_UVB, ]
+valid <- UVBank[-train_UVB, ]
+
+
+```
+## scale
+
+```{r}
+scale_with <- function(df, ref) {
+     mu <- sapply(ref, mean); sdv <- sapply(ref, sd)
+     as.data.frame(sweep(sweep(as.matrix(df), 2, mu, "-"), 2, sdv, "/"))
+}
+conf <- function(actual, pred) table(Actual = actual, Predicted = factor(pred, levels = c(0, 1)))
+
+     
+```
+
+## setup for knn Reference list: Anthropic. (2026). Claude Sonnet 5.5 [Large language model]. https://claude.ai, (Anthropic, 2026)
+
+```{r}
+library(class)
+target <- "Personal.Loan"
+```
+
+## k = 1 (60/40)
+
+```{r}
+train_60 <- scale_with(train[, predictors], train[, predictors])
+valid_60 <- scale_with(valid[, predictors], train[, predictors])
+new_60   <- scale_with(new_customer,        train[, predictors])
+
+prediction60 <- knn(train_60, new_60, cl = train[[target]], k = 1)
+cat("k = 1 of new_customer:", as.character(prediction60), "\n\n")
+```
+
+## best k
+
+```{r}
+ks  <- 1:25
+acc <- sapply(ks, function(k)
+  mean(knn(train_60, valid_60, cl = train[[target]], k = k) == valid[[target]]))
+print(data.frame(k = ks, valid_accuracy = round(acc, 4)))
+
+best_k <- ks[which.max(acc)]
+cat("\nBest k =", best_k, "\n")
+
+p_valid <- knn(train_60, valid_60, cl = train[[target]], k = best_k)
+print(conf(valid[[target]], p_valid))
+
+cat("Best-k classification of new_customer:",
+    as.character(knn(train_60, new_60, cl = train[[target]], k = best_k)), "\n")
+```
+
+## 50/30/20 partition
+
+```{r}
+set.seed(1)
+idx  <- sample(n)
+tr_i <- idx[1:(0.5 * n)]
+va_i <- idx[(0.5 * n + 1):(0.8 * n)]
+te_i <- idx[(0.8 * n + 1):n]
+
+tr <- UVBank[tr_i, ]; va <- UVBank[va_i, ]; te <- UVBank[te_i, ]
+
+tr_x <- scale_with(tr[, predictors], tr[, predictors])
+va_x <- scale_with(va[, predictors], tr[, predictors])
+te_x <- scale_with(te[, predictors], tr[, predictors])
+```
+
+## report
+
+```{r}
+report <- function(name, x, d) {
+  p <- knn(tr_x, x, cl = tr[[target]], k = best_k)
+  cat("\n.", name, "confusion matrix (n =", nrow(d), ", accuracy =",
+      round(mean(p == d[[target]]), 4), "):\n")
+  print(conf(d[[target]], p))
+}
+
+report("Training",   tr_x, tr)
+report("Validation", va_x, va)
+report("Test",       te_x, te)
+
+
+```
+
+
+```
+
+
